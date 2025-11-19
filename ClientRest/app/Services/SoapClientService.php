@@ -43,4 +43,15 @@ class SoapClientService
 
         return $this->_call('registroCliente', $params);
     }
+
+    public function recargaBilletera(string $documento, string $celular, float $valor): array
+    {
+        $params = [
+            'documento' => $documento,
+            'celular' => $celular,
+            'valor' => $valor
+        ];
+
+        return $this->_call('recargaBilletera', $params);
+    }
 }

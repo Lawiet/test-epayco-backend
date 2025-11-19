@@ -45,4 +45,33 @@ class WalletController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Recarga la billetera llamando al método SOAP.
+     */
+    public function recargaBilletera(Request $request)
+    {
+        $this->validate($request, [
+            'documento' => 'required|string',
+            'celular'   => 'required|string',
+            'valor'     => 'required|numeric|min:1',
+        ]);
+
+        try {
+            $response = $this->soapClient->recargaBilletera(
+                $request->input('documento'),
+                $request->input('celular'),
+                (float) $request->input('valor')
+            );
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'cod_error' => '99',
+                'message_error' => 'Error de puente/comunicación: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
 }

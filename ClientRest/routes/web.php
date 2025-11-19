@@ -19,4 +19,5 @@ $router->get('/', function () use ($router) {
 
 $router->group(['prefix' => 'api/v1/wallet'], function () use ($router) {
     $router->post('register', 'WalletController@registroCliente');
+    $router->post('recharge', 'WalletController@recargaBilletera');
 });
