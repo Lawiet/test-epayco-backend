@@ -75,4 +75,14 @@ class SoapClientService
 
         return $this->_call('confirmarPago', $params);
     }
+
+    public function consultarSaldo(string $documento, string $celular): array
+    {
+        $params = [
+            'documento' => $documento,
+            'celular' => $celular,
+        ];
+
+        return $this->_call('consultarSaldo', $params);
+    }
 }

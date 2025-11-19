@@ -130,4 +130,31 @@ class WalletController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Consulta el saldo de la billetera (método SOAP).
+     */
+    public function consultarSaldo(Request $request)
+    {
+        $this->validate($request, [
+            'documento' => 'required|string',
+            'celular'   => 'required|string',
+        ]);
+
+        try {
+            $response = $this->soapClient->consultarSaldo(
+                $request->input('documento'),
+                $request->input('celular')
+            );
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'cod_error' => '99',
+                'message_error' => 'Error de puente/comunicación: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
 }

@@ -286,4 +286,33 @@ class WalletSoapService
             return $this->formatResponse(false, '99', 'Error interno del sistema al confirmar el pago: ' . $e->getMessage());
         }
     }
+
+    /**
+     * @param string $documento
+     * @param string $celular
+     * @return array
+     */
+    public function consultarSaldo($documento, $celular)
+    {
+        if (empty($documento)) {
+            return $this->formatResponse(false, '50', 'El campo "documento" es obligatorio para la consulta.');
+        }
+        if (empty($celular)) {
+            return $this->formatResponse(false, '51', 'El campo "celular" es obligatorio para la consulta.');
+        }
+
+        $client = Client::where('identification', $documento)
+            ->where('phone', $celular)
+            ->first();
+
+        if (!$client || !$client->wallet) {
+            return $this->formatResponse(false, '52', 'Cliente o billetera no encontrados (documento y celular no coinciden).');
+        }
+
+        $wallet = $client->wallet;
+
+        return $this->formatResponse(true, '00', 'Consulta de saldo exitosa.', [
+            'saldo_actual' => (float)$wallet->balance,
+        ]);
+    }
 }
