@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('transaction_id')->constrained();
             $table->string('code', 6);
+            $table->string('session_id');
             $table->timestamp('expires_at');
             $table->boolean('used')->default(false);
             $table->timestamps();

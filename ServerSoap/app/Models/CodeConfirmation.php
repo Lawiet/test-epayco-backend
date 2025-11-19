@@ -16,6 +16,7 @@ class CodeConfirmation extends Model
     protected $fillable = [
         'transaction_id',
         'code',
+        'session_id',
         'expires_at',
         'used',
     ];

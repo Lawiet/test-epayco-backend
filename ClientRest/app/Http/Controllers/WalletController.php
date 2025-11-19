@@ -103,4 +103,31 @@ class WalletController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Confirma el pago usando id_sesion y token (método SOAP).
+     */
+    public function confirmarPago(Request $request)
+    {
+        $this->validate($request, [
+            'id_sesion' => 'required|string',
+            'token'     => 'required|string|size:6',
+        ]);
+
+        try {
+            $response = $this->soapClient->confirmarPago(
+                $request->input('id_sesion'),
+                $request->input('token')
+            );
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'cod_error' => '99',
+                'message_error' => 'Error de puente/comunicación: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
 }

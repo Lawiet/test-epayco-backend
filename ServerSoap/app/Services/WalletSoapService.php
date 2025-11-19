@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\PaymentConfirmationMail;
 use App\Models\Client;
+use App\Models\CodeConfirmation;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -100,9 +101,9 @@ class WalletSoapService
         try {
             DB::beginTransaction();
 
-            $wallet = $client->wallet;
-            $wallet->balance += $valor;
-            $wallet->save();
+            $wallet = $client->wallet->update([
+                'balance' => $client->wallet->balance + $valor,
+            ]);
 
             $reference = 'DEP_' . uniqid(true);
             $wallet->transactions()->create([
@@ -195,6 +196,94 @@ class WalletSoapService
         } catch (Exception $e) {
             DB::rollBack();
             return $this->formatResponse(false, '99', 'Error interno del sistema al iniciar el pago: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param string $id_sesion
+     * @param string $token
+     * @return array
+     */
+    public function confirmarPago($id_sesion, $token)
+    {
+        if (empty($id_sesion)) {
+            return $this->formatResponse(false, '40', 'El campo "id_sesion" es obligatorio.');
+        }
+        if (empty($token)) {
+            return $this->formatResponse(false, '41', 'El campo "token" es obligatorio.');
+        }
+
+        $confirmation = CodeConfirmation::with(['transaction.wallet'])
+            ->where('session_id', $id_sesion)
+            ->where('code', $token)
+            ->first();
+
+        if (!$confirmation || !$confirmation->transaction || !$confirmation->transaction->wallet) {
+            return $this->formatResponse(false, '42', 'Token o ID de sesión inválido o no encontrado.');
+        }
+
+        $transaction = $confirmation->transaction;
+        $wallet = $transaction->wallet;
+        $amount = $transaction->amount;
+
+        if ($confirmation->used) {
+            return $this->formatResponse(false, '44', 'La sesión ya ha sido utilizada para confirmar el pago.');
+        }
+
+        if (now()->greaterThan($confirmation->expires_at)) {
+            $confirmation->update([
+                'used' => true,
+            ]);
+            $transaction->update([
+                "status" => 'failed',
+            ]);
+            return $this->formatResponse(false, '43', 'El token de confirmación ha expirado.');
+        }
+
+        if ($transaction->status !== 'pending') {
+            return $this->formatResponse(false, '44', 'La transacción ya fue procesada (completada o fallida).');
+        }
+
+        if ($wallet->balance < $amount) {
+            $confirmation->update([
+                'used' => true,
+            ]);
+            $transaction->update([
+                "status" => 'failed',
+            ]);
+            return $this->formatResponse(false, '45', 'Saldo insuficiente para completar la compra.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $wallet->decrement('balance', $amount);
+            $wallet->refresh();
+
+            $transaction->update([
+                "status" => 'completed',
+            ]);
+
+            $confirmation->update([
+                'used' => true,
+            ]);
+
+            DB::commit();
+
+            return $this->formatResponse(true, '00', 'Pago confirmado y saldo descontado exitosamente.', [
+                'saldo_actual' => $wallet->balance,
+                'valor_descontado' => $amount,
+                'referencia' => $transaction->reference
+            ]);
+
+        } catch (Exception $e) {
+            \Log::error($e);
+            DB::rollBack();
+            if ($transaction->status === 'pending') {
+                $transaction->status = 'failed';
+                $transaction->save();
+            }
+            return $this->formatResponse(false, '99', 'Error interno del sistema al confirmar el pago: ' . $e->getMessage());
         }
     }
 }

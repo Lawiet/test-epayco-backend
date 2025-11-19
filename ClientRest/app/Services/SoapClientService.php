@@ -65,4 +65,14 @@ class SoapClientService
 
         return $this->_call('pagar', $params);
     }
+
+    public function confirmarPago(string $id_sesion, string $token): array
+    {
+        $params = [
+            'id_sesion' => $id_sesion,
+            'token' => $token,
+        ];
+
+        return $this->_call('confirmarPago', $params);
+    }
 }

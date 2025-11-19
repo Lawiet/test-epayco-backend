@@ -21,4 +21,5 @@ $router->group(['prefix' => 'api/v1/wallet'], function () use ($router) {
     $router->post('register', 'WalletController@registroCliente');
     $router->post('recharge', 'WalletController@recargaBilletera');
     $router->post('pay', 'WalletController@pagar');
+    $router->post('confirm-pay', 'WalletController@confirmarPago');
 });
