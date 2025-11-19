@@ -48,6 +48,19 @@ $app->singleton(
     App\Console\Kernel::class
 );
 
+$app->singleton(
+    \App\Services\SoapClientService::class,
+    function ($app) {
+        $wsdl = env('SOAP_WSDL_URL');
+
+        if (!$wsdl) {
+            throw new \Exception("La variable de entorno SOAP_WSDL_URL no está configurada.");
+        }
+
+        return new \App\Services\SoapClientService($wsdl);
+    }
+);
+
 /*
 |--------------------------------------------------------------------------
 | Register Config Files
