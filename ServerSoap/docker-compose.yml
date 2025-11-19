@@ -1,0 +1,214 @@
+#Docker Networks
+networks:
+    app-test-epayco-server-network:
+        driver: bridge
+
+# Volumes
+volumes:
+    database-data-test-epayco-server:
+        driver: local
+    app-node-test-epayco-server:
+        driver: local
+    app-vendor-test-epayco-server:
+        driver: local
+
+services:
+
+    # Database Service
+    database-test-epayco-server:
+        image: mysql:9.4
+        hostname: database-test-epayco-server
+        container_name: database-test-epayco-server
+        restart: always
+        tty: true
+        ports:
+            - ${DOCKER_DB_PORT:-4300}:3306
+        volumes:
+            - ./.database-data:/var/lib/mysql
+        environment:
+            MYSQL_DATABASE: ${DOCKER_DB_DATABASE:-app}
+            MYSQL_ROOT_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+        healthcheck:
+            test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent", "-p${DOCKER_DB_PASSWORD:-root}" ]
+            interval: 30s
+            timeout: 5s
+            retries: 2
+            start_period: 0s
+        networks:
+            - app-test-epayco-server-network
+
+    # PHPMyAdmin Service
+    phpmyadmin-test-epayco-server:
+        image: phpmyadmin:5.2
+        hostname: phpmyadmin-test-epayco-server
+        container_name: phpmyadmin-test-epayco-server
+        restart: always
+        tty: true
+        depends_on:
+            database-test-epayco-server:
+                condition: service_healthy
+        ports:
+            - ${DOCKER_PMA_PORT:-8090}:80
+        environment:
+            PMA_HOST: ${DOCKER_DB_HOST:-database-test-epayco-server}
+            PMA_PORT: ${DOCKER_DB_PORT:-3306}
+            MYSQL_ROOT_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+            UPLOAD_LIMIT: ${PMA_UPLOAD_LIMIT:-4G}
+            MEMORY_LIMIT: ${PMA_MEMORY_LIMIT:-512M}
+            PHP_UPLOAD_MAX_FILESIZE: ${PMA_PHP_UPLOAD_MAX_FILESIZE:-4G}
+            PHP_MAX_INPUT_VARS: ${PMA_PHP_MAX_INPUT_VARS:-1000}
+            MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-0}
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:80"]
+            interval: 90s
+            timeout: 10s
+            retries: 5
+        links:
+            - database-test-epayco-server
+        networks:
+            - app-test-epayco-server-network
+
+    # Application Service
+    app-test-epayco-server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        hostname: app-test-epayco-server
+        container_name: app-test-epayco-server
+        restart: always
+        tty: true
+        depends_on:
+            database-test-epayco-server:
+                condition: service_healthy
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+            DB_CONNECTION: mysql
+            DB_HOST: database-test-epayco-server
+            DB_PORT: 3306
+            DB_DATABASE: ${DOCKER_DB_DATABASE:-app}
+            DB_USERNAME: root
+            DB_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+            UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-100M}
+            MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+            MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-600}
+            APP_DEBUG: true
+        working_dir: /var/www/html
+        volumes:
+            - ./.docker/php/conf.d/error_reporting.ini:/usr/local/etc/php/conf.d/docker-php-ext-error_reporting.ini
+            - ./.docker/php/conf.d/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+            - ./.docker/php/conf.d/extra.ini:/usr/local/etc/php/conf.d/docker-php-extra.ini
+            - ./:/var/www/html:cached
+            - app-node-test-epayco-server:/var/www/html/node_modules
+            - app-vendor-test-epayco-server:/var/www/html/vendor
+        links:
+            - database-test-epayco-server
+        networks:
+            - app-test-epayco-server-network
+
+    # Nginx Service
+    nginx-test-epayco-server:
+        image: nginx:alpine
+        hostname: nginx-test-epayco-server
+        container_name: nginx-test-epayco-server
+        restart: always
+        tty: true
+        depends_on:
+            database-test-epayco-server:
+                condition: service_healthy
+        ports:
+            - ${DOCKER_NGINX_PORT:-8000}:80
+        volumes:
+            - ./:/var/www/html
+            - ./.docker/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:80/"]
+            interval: 90s
+            timeout: 10s
+            retries: 5
+        links:
+            - app-test-epayco-server
+        networks:
+            - app-test-epayco-server-network
+
+    # Scheduler Service
+    scheduler-test-epayco-server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        hostname: scheduler-test-epayco-server
+        container_name: scheduler-test-epayco-server
+        restart: always
+        tty: true
+        depends_on:
+            database-test-epayco-server:
+                condition: service_healthy
+        environment:
+            SERVICE_NAME: scheduler
+            DB_CONNECTION: mysql
+            DB_HOST: database-test-epayco-server
+            DB_DATABASE: ${DOCKER_DB_DATABASE:-app}
+            DB_USERNAME: root
+            DB_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+        working_dir: /var/www/html
+        volumes:
+            - ./:/var/www/html:cached
+            - app-node-test-epayco-server:/var/www/html/node_modules
+            - app-vendor-test-epayco-server:/var/www/html/vendor
+        links:
+            - database-test-epayco-server
+        networks:
+            - app-test-epayco-server-network
+        command: php artisan schedule:work
+
+    # setup
+    setup-test-epayco-server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        hostname: setup-test-epayco-server
+        container_name: setup-test-epayco-server
+        depends_on:
+            database-test-epayco-server:
+                condition: service_healthy
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+            DB_CONNECTION: mysql
+            DB_HOST: database-test-epayco-server
+            DB_PORT: 3306
+            DB_DATABASE: ${DOCKER_DB_DATABASE:-app}
+            DB_USERNAME: root
+            DB_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+            UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-100M}
+            MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+            MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-600}
+            APP_DEBUG: true
+        volumes:
+            - ./:/var/www/html
+            - app-node-test-epayco-server:/var/www/html/node_modules
+            - app-vendor-test-epayco-server:/var/www/html/vendor
+        command: >
+            bash -c '
+              rm -rf composer.lock package-lock.json 2> /dev/null;
+              mkdir -p storage/logs 2> /dev/null;
+              chown -R www-data:www-data storage bootstrap/cache 2> /dev/null;
+              chmod -R 775 storage 2> /dev/null;
+
+              # Install Composer dependencies
+              composer --ignore-platform-reqs --no-interaction install 2> /dev/null;
+
+              # Create .env file if it does not exist
+              if [ ! -f ".env" ]; then
+                cp .env.example .env;
+                php artisan key:generate --ansi;
+                php artisan migrate --seed --ansi --force --no-interaction 2> /dev/null;
+              fi;
+
+              php artisan migrate --seed --ansi --no-interaction 2> /dev/null;
+
+              php artisan optimize:clear 2> /dev/null;
+              npm install;
+            '
+        networks:
+            - app-test-epayco-server-network

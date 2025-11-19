@@ -1,0 +1,102 @@
+#Docker Networks
+networks:
+    app-test-epayco-client-network:
+        driver: bridge
+
+# Volumes
+volumes:
+    app-node-test-epayco-client:
+        driver: local
+    app-vendor-test-epayco-client:
+        driver: local
+
+services:
+
+    # Application Service
+    app-test-epayco-client:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        hostname: app-test-epayco-client
+        container_name: app-test-epayco-client
+        restart: always
+        tty: true
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+            DB_PASSWORD: ${DOCKER_DB_PASSWORD:-root}
+            UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-100M}
+            MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+            MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-600}
+            APP_DEBUG: true
+        working_dir: /var/www/html
+        volumes:
+            - ./.docker/php/conf.d/error_reporting.ini:/usr/local/etc/php/conf.d/docker-php-ext-error_reporting.ini
+            - ./.docker/php/conf.d/xdebug.ini:/usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+            - ./.docker/php/conf.d/extra.ini:/usr/local/etc/php/conf.d/docker-php-extra.ini
+            - ./:/var/www/html:cached
+            - app-node-test-epayco-client:/var/www/html/node_modules
+            - app-vendor-test-epayco-client:/var/www/html/vendor
+        networks:
+            - app-test-epayco-client-network
+
+    # Nginx Service
+    nginx-test-epayco-client:
+        image: nginx:alpine
+        hostname: nginx-test-epayco-client
+        container_name: nginx-test-epayco-client
+        restart: always
+        tty: true
+        ports:
+            - ${DOCKER_NGINX_PORT:-8001}:80
+        volumes:
+            - ./.docker/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:80/"]
+            interval: 90s
+            timeout: 10s
+            retries: 5
+        links:
+            - app-test-epayco-client
+        networks:
+            - app-test-epayco-client-network
+
+    # setup
+    setup-test-epayco-client:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        hostname: setup-test-epayco-client
+        container_name: setup-test-epayco-client
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+            UPLOAD_LIMIT: ${PHP_UPLOAD_LIMIT:-100M}
+            MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-512M}
+            MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-600}
+            APP_DEBUG: true
+        volumes:
+            - ./:/var/www/html
+            - app-node-test-epayco-client:/var/www/html/node_modules
+            - app-vendor-test-epayco-client:/var/www/html/vendor
+        command: >
+            bash -c '
+              rm -rf composer.lock package-lock.json 2> /dev/null;
+              mkdir -p storage/logs 2> /dev/null;
+              chown -R www-data:www-data storage bootstrap/cache 2> /dev/null;
+              chmod -R 775 storage 2> /dev/null;
+
+              # Install Composer dependencies
+              composer --ignore-platform-reqs --no-interaction install 2> /dev/null;
+
+              # Create .env file if it does not exist
+              if [ ! -f ".env" ]; then
+                cp .env.example .env;
+                php artisan key:generate --ansi;
+              fi;
+
+              php artisan optimize:clear 2> /dev/null;
+              npm install;
+            '
+        networks:
+            - app-test-epayco-client-network
