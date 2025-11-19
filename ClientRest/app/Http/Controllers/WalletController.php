@@ -74,4 +74,33 @@ class WalletController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Inicia el proceso de pago, genera token y id_sesion (método SOAP).
+     */
+    public function pagar(Request $request)
+    {
+        $this->validate($request, [
+            'documento'    => 'required|string',
+            'celular'      => 'required|string',
+            'valor_compra' => 'required|numeric|min:1',
+        ]);
+
+        try {
+            $response = $this->soapClient->pagar(
+                $request->input('documento'),
+                $request->input('celular'),
+                (float) $request->input('valor_compra')
+            );
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'cod_error' => '99',
+                'message_error' => 'Error de puente/comunicación: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
 }

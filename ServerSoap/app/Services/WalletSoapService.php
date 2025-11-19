@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Mail\PaymentConfirmationMail;
 use App\Models\Client;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class WalletSoapService
 {
@@ -118,6 +121,80 @@ class WalletSoapService
         } catch (Exception $e) {
             DB::rollBack();
             return $this->formatResponse(false, '99', 'Error interno del sistema al procesar la recarga: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param string $documento
+     * @param string $celular
+     * @param float $valor_compra
+     * @return array
+     */
+    public function pagar($documento, $celular, $valor_compra)
+    {
+        if (empty($documento)) {
+            return $this->formatResponse(false, '30', 'El campo "documento" es obligatorio para el pago.');
+        }
+        if (empty($celular)) {
+            return $this->formatResponse(false, '31', 'El campo "celular" es obligatorio para el pago.');
+        }
+        if (!is_numeric($valor_compra) || empty($valor_compra)) {
+            return $this->formatResponse(false, '32', 'El campo "valor_compra" es obligatorio y debe ser numérico.');
+        }
+        $valor_compra = round((float)$valor_compra, 2);
+
+        if ($valor_compra <= 0) {
+            return $this->formatResponse(false, '33', 'El valor de la compra debe ser positivo.');
+        }
+
+        $client = Client::where('identification', $documento)
+            ->where('phone', $celular)
+            ->first();
+
+        if (!$client || !$client->wallet) {
+            return $this->formatResponse(false, '34', 'Cliente o billetera no encontrados (documento y celular no coinciden).');
+        }
+
+        $wallet = $client->wallet;
+
+        if ($wallet->balance < $valor_compra) {
+            return $this->formatResponse(false, '35', 'Saldo insuficiente para realizar el pago. Saldo actual: ' . $wallet->balance);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $reference = 'BUY_' . Str::uuid();
+            $transaction = $client->wallet->transactions()->create([
+                'type' => 'buy',
+                'amount' => $valor_compra,
+                'status' => 'pending',
+                'reference' => $reference,
+            ]);
+
+            $sessionId = (string)Str::uuid();
+            $token = str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            $transaction->confirmations()->create([
+                'transaction_id' => $transaction->id,
+                'code' => $token,
+                'expires_at' => now()->addMinutes(5),
+                'used' => false,
+                'session_id' => $sessionId,
+            ]);
+
+            Mail::to($client->email)->send(new PaymentConfirmationMail($token, $valor_compra, $client->name));
+
+            DB::commit();
+
+            return $this->formatResponse(true, '00', 'Token de confirmación generado y "enviado" al email: ' . $client->email . '. Use el id de sesión y el token para la confirmación.', [
+                'id_sesion' => $sessionId,
+                'referencia' => $reference
+            ]);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            return $this->formatResponse(false, '99', 'Error interno del sistema al iniciar el pago: ' . $e->getMessage());
         }
     }
 }
