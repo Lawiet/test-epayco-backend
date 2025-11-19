@@ -1,0 +1,160 @@
+{
+	"info": {
+		"_postman_id": "d722a7e6-9157-499b-a058-5f0a4fc995f9",
+		"name": "EPayco Wallet REST API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "44127237",
+		"_collection_link": "https://jorgegonzalez-5696467.postman.co/workspace/Jorge-Gonzalez's-Workspace~3c56754b-8252-40a4-81ef-a48e2d456107/collection/44127237-d722a7e6-9157-499b-a058-5f0a4fc995f9?action=share&source=collection_link&creator=44127237"
+	},
+	"item": [
+		{
+			"name": "1. Registro Cliente",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"documento\": \"{{documento}}\",\n    \"nombres\": \"{{nombres}}\",\n    \"email\": \"{{email}}\",\n    \"celular\": \"{{celular}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/register",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"register"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Recarga Billetera",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"documento\": \"{{documento}}\",\n    \"celular\": \"{{celular}}\",\n    \"valor\": 50000.00\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/recharge",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"recharge"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Pagar (Generar Token)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"if (jsonData.success && jsonData.data.id_sesion) {",
+							"    pm.environment.set(\"id_sesion\", jsonData.data.id_sesion);",
+							"    console.log(\"ID de Sesión guardado: \" + jsonData.data.id_sesion);",
+							"} else {",
+							"    console.log(\"Error al obtener ID de sesión\");",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"documento\": \"{{documento}}\",\n    \"celular\": \"{{celular}}\",\n    \"valor_compra\": 10000.00\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/pay",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"pay"
+					]
+				},
+				"description": "Inicia la compra, genera el token y retorna el ID de sesión. La prueba guarda el ID de sesión en una variable de entorno."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Confirmar Pago",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id_sesion\": \"{{id_sesion}}\",\n    \"token\": \"XXXXXX\" \n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/confirm-pay",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"confirm-pay"
+					]
+				},
+				"description": "Confirma la compra. DEBES REEMPLAZAR XXXXXX por el token de 6 dígitos que se envió al email (revisar Mailpit o logs)."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Consultar Saldo",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"documento\": \"{{documento}}\",\n    \"celular\": \"{{celular}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/balance",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"balance"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
